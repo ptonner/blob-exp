@@ -1,37 +1,49 @@
 use macroquad::prelude::*;
+use nalgebra::Vector2;
 use rapier2d::prelude::*;
+
+#[derive(Default)]
+struct World {
+    bodies: RigidBodySet,
+    colliders: ColliderSet,
+    impulse_joints: ImpulseJointSet,
+    multibody_joints: MultibodyJointSet,
+}
+
+struct Blob {
+    center: RigidBodyHandle,
+}
+impl Blob {
+    fn new(center: Vector2<Real>, radius: Real, world: &mut World) -> Self {
+        // central ball
+        let central_body = RigidBodyBuilder::dynamic().translation(center);
+        let handle_center = world.bodies.insert(central_body);
+        let collider = ColliderBuilder::ball(radius);
+        world
+            .colliders
+            .insert_with_parent(collider, handle_center, &mut world.bodies);
+
+        Blob {
+            center: handle_center,
+        }
+    }
+}
 
 #[macroquad::main("_floating_")]
 async fn main() {
     let w = screen_width();
     let h = screen_height();
-    let mut rigid_body_set = RigidBodySet::new();
-    let mut collider_set = ColliderSet::new();
-
-    /* Create the ground. */
-    let collider = ColliderBuilder::cuboid(100.0, 0.1)
-        .translation(vector![0.0, 0.0])
-        .build();
-    collider_set.insert(collider);
-
-    /* Create the bouncing ball. */
-    let rigid_body = RigidBodyBuilder::dynamic()
-        .translation(vector![w / 2.0, h / 2.0])
-        .build();
-    let collider = ColliderBuilder::ball(0.5).restitution(0.7).build();
-    let ball_body_handle = rigid_body_set.insert(rigid_body);
-    collider_set.insert_with_parent(collider, ball_body_handle, &mut rigid_body_set);
+    let mut world = World::default();
+    let blob = Blob::new(vector![w / 2.0, h / 2.0], 20.0, &mut world);
 
     /* Create other structures necessary for the simulation. */
-    let gravity = vector![0.0, -9.81];
+    let gravity = vector![0.0, 0.0];
     let mut integration_parameters = IntegrationParameters::default();
     integration_parameters.set_inv_dt(60.0);
     let mut physics_pipeline = PhysicsPipeline::new();
     let mut island_manager = IslandManager::new();
     let mut broad_phase = DefaultBroadPhase::new();
     let mut narrow_phase = NarrowPhase::new();
-    let mut impulse_joint_set = ImpulseJointSet::new();
-    let mut multibody_joint_set = MultibodyJointSet::new();
     let mut ccd_solver = CCDSolver::new();
     let mut query_pipeline = QueryPipeline::new();
     let physics_hooks = ();
@@ -44,17 +56,17 @@ async fn main() {
             &mut island_manager,
             &mut broad_phase,
             &mut narrow_phase,
-            &mut rigid_body_set,
-            &mut collider_set,
-            &mut impulse_joint_set,
-            &mut multibody_joint_set,
+            &mut world.bodies,
+            &mut world.colliders,
+            &mut world.impulse_joints,
+            &mut world.multibody_joints,
             &mut ccd_solver,
             Some(&mut query_pipeline),
             &physics_hooks,
             &event_handler,
         );
 
-        let ball_body = &rigid_body_set[ball_body_handle];
+        let ball_body = &world.bodies[blob.center];
 
         clear_background(BLACK);
 
