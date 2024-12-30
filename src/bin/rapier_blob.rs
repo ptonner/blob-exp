@@ -6,7 +6,8 @@ use std::{
 use itertools::Itertools;
 use macroquad::prelude::*;
 use macroquad::rand;
-use nalgebra::{distance, Vector, Vector2};
+use macroquad::ui::{hash, root_ui, widgets::Window};
+use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
 #[derive(Default)]
@@ -157,29 +158,17 @@ impl Blob {
             BLUE,
         );
     }
+
+    fn total_mass(&self, phys: &Physics) -> f32 {
+        let bodies = &phys.bodies;
+        bodies[self.center].mass() + self.shell.iter().map(|it| bodies[*it].mass()).sum::<Real>()
+    }
 }
 
-#[macroquad::main("_floating_")]
-async fn main() {
-    // Dimensions
-    let size: f32 = 50.0;
-    let gap: f32 = 0.0;
-    request_new_screen_size(800.0, 800.0);
-    let camera = Camera2D::from_display_rect(Rect {
-        x: -size / 2.0 - gap,
-        y: -size / 2.0 - gap,
-        w: size + gap * 2.0,
-        h: size + gap * 2.0,
-    });
-    set_camera(&camera);
-
-    // Physics
+fn init(size: f32, num_splits: u32, log_radius: f32, impulse: f32) -> (Physics, Vec<Blob>) {
     let mut phys = Physics::default();
-    // phys.integration_parameters.contact_damping_ratio = 10.0;
+    phys.integration_parameters.contact_damping_ratio = 1.0e-1;
     phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(10).unwrap();
-
-    // Blobs
-    let num_splits = 6;
     let mut blobs = Vec::<Blob>::new();
     for i in 0..num_splits {
         for j in 0..num_splits {
@@ -190,19 +179,19 @@ async fn main() {
                     size * (j as f32 / num_splits as f32) - size / 2.0
                         + size / 2.0 / num_splits as f32
                 ],
-                5.0e-1,
+                10.0_f32.powf(log_radius),
                 12,
                 100.0,
                 2.0,
                 1.0,
                 &mut phys,
             );
+            let ang = rand::gen_range(-PI, PI);
+            let imp =
+                Vector2::new(ang.cos(), ang.sin()).normalize() * blob.total_mass(&phys) * impulse;
             let ball_body = &mut phys.bodies[blob.center];
             ball_body.reset_forces(true);
             ball_body.reset_torques(true);
-            // ball_body.apply_impulse(vector![-3.0, 5.0] * 1.0, true);
-            let ang = rand::gen_range(-PI, PI);
-            let imp = Vector2::new(ang.cos(), ang.sin()).normalize() * 15.0;
             ball_body.apply_impulse(imp, true);
             blobs.push(blob);
         }
@@ -240,11 +229,50 @@ async fn main() {
     let handle = phys.colliders.insert(collider);
     walls.push(handle);
 
+    (phys, blobs)
+}
+
+#[macroquad::main("_floating_")]
+async fn main() {
+    // Dimensions
+    let size: f32 = 50.0;
+    let gap: f32 = 0.0;
+    request_new_screen_size(800.0, 800.0);
+    let dialog_size = vec2(200., 200.);
+    let screen_size = vec2(800.0, 800.0);
+    let dialog_position = vec2(0.0, 0.0);
+    let camera = Camera2D::from_display_rect(Rect {
+        x: -size / 2.0 - gap,
+        y: -size / 2.0 - gap,
+        w: size + gap * 2.0,
+        h: size + gap * 2.0,
+    });
+    set_camera(&camera);
+
+    // Simulation
+    let mut num_splits = 6;
+    let mut log_radius = 0.0;
+    let mut impulse = 1.0;
+    let (mut phys, mut blobs) = init(size, num_splits, log_radius, impulse);
+
     loop {
         phys.step();
 
         clear_background(BLACK);
 
+        // ui
+        root_ui().window(hash!(), dialog_position, dialog_size, |ui| {
+            ui.drag(hash!(), "splits", Some((1, 12)), &mut num_splits);
+            ui.slider(hash!(), "log radius", -2f32..0f32, &mut log_radius);
+            ui.slider(hash!(), "impulse", 0.5f32..15.0f32, &mut impulse);
+            if ui.button(None, "reset") {
+                let (p, b) = init(size, num_splits, log_radius, impulse);
+                phys = p;
+                blobs = b;
+            }
+        });
+
+        // scene
         for blob in blobs.iter() {
             blob.draw(&mut phys);
         }

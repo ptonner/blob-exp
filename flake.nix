@@ -30,6 +30,7 @@
           pkg-config
           (rust-bin.stable.latest.default.override { targets = [ "wasm32-unknown-unknown" ]; })
           wasm-bindgen-cli
+          cargo-edit
         ];
         buildInputs = with pkgs; [
           libGL
