@@ -5,7 +5,8 @@ use std::{
 
 use itertools::Itertools;
 use macroquad::prelude::*;
-use nalgebra::{distance, Vector2};
+use macroquad::rand;
+use nalgebra::{distance, Vector, Vector2};
 use rapier2d::prelude::*;
 
 #[derive(Default)]
@@ -58,6 +59,7 @@ impl Blob {
         shell_size: u32,
         stiffness: f32,
         damping: f32,
+        gap: f32,
         world: &mut Physics,
     ) -> Self {
         // central ball
@@ -75,7 +77,7 @@ impl Blob {
         // let stiffness = 150.0;
         // let damping = 2.0;
         let shell_step = PI * 2.0 / shell_size as f32;
-        let base_distance = 2.5 * radius;
+        let base_distance = (1.5 + gap) * radius;
         let mut shells = Vec::<RigidBodyHandle>::new();
         for i in 0..shell_size {
             let x = (shell_step * i as f32).cos();
@@ -160,7 +162,7 @@ impl Blob {
 #[macroquad::main("_floating_")]
 async fn main() {
     // Dimensions
-    let size: f32 = 40.0;
+    let size: f32 = 50.0;
     let gap: f32 = 0.0;
     request_new_screen_size(800.0, 800.0);
     let camera = Camera2D::from_display_rect(Rect {
@@ -176,13 +178,35 @@ async fn main() {
     // phys.integration_parameters.contact_damping_ratio = 10.0;
     phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(10).unwrap();
 
-    // Blob
-    let blob = Blob::new(vector![0.0, 0.0], 5.0e-1, 10, 300.0, 2.0, &mut phys);
-    let ball_body = &mut phys.bodies[blob.center];
-    ball_body.reset_forces(true);
-    ball_body.reset_torques(true);
-    ball_body.apply_impulse(vector![-3.0, 5.0] * 10.0, true);
-    // ball_body.apply_impulse(vector![5.0, 0.0], true);
+    // Blobs
+    let num_splits = 6;
+    let mut blobs = Vec::<Blob>::new();
+    for i in 0..num_splits {
+        for j in 0..num_splits {
+            let blob = Blob::new(
+                vector![
+                    size * (i as f32 / num_splits as f32) - size / 2.0
+                        + size / 2.0 / num_splits as f32,
+                    size * (j as f32 / num_splits as f32) - size / 2.0
+                        + size / 2.0 / num_splits as f32
+                ],
+                5.0e-1,
+                12,
+                100.0,
+                2.0,
+                1.0,
+                &mut phys,
+            );
+            let ball_body = &mut phys.bodies[blob.center];
+            ball_body.reset_forces(true);
+            ball_body.reset_torques(true);
+            // ball_body.apply_impulse(vector![-3.0, 5.0] * 1.0, true);
+            let ang = rand::gen_range(-PI, PI);
+            let imp = Vector2::new(ang.cos(), ang.sin()).normalize() * 15.0;
+            ball_body.apply_impulse(imp, true);
+            blobs.push(blob);
+        }
+    }
 
     // Add walls
     let mut walls: Vec<ColliderHandle> = Vec::new();
@@ -221,7 +245,9 @@ async fn main() {
 
         clear_background(BLACK);
 
-        blob.draw(&mut phys);
+        for blob in blobs.iter() {
+            blob.draw(&mut phys);
+        }
 
         next_frame().await
     }
