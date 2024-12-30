@@ -44,112 +44,100 @@ impl Physics {
 
 struct Blob {
     center: RigidBodyHandle,
+    radius: Real,
 }
 impl Blob {
     fn new(center: Vector2<Real>, radius: Real, world: &mut Physics) -> Self {
         // central ball
         let central_body = RigidBodyBuilder::dynamic().translation(center);
         let handle_center = world.bodies.insert(central_body);
-        let collider = ColliderBuilder::ball(radius).restitution(1.0);
+        let collider = ColliderBuilder::ball(radius)
+            .friction(0.0)
+            .restitution(1.0)
+            .mass(1.0);
         world
             .colliders
             .insert_with_parent(collider, handle_center, &mut world.bodies);
 
         Blob {
             center: handle_center,
+            radius,
         }
+    }
+
+    fn draw(&self, phys: &mut Physics) {
+        let ball_body = &mut phys.bodies[self.center];
+        draw_circle(
+            ball_body.position().translation.vector.x,
+            ball_body.position().translation.vector.y,
+            self.radius,
+            BLUE,
+        );
     }
 }
 
 #[macroquad::main("_floating_")]
 async fn main() {
     // Dimensions
+    let size: f32 = 20.0;
+    let gap: f32 = 0.0;
     request_new_screen_size(800.0, 800.0);
-    let w: f32 = 800.0;
-    let h: f32 = 800.0;
-    // let w = screen_width();
-    // let h = screen_height();
-    let scale = w.min(h);
-    let size = 7.0 * scale / 8.0;
-    let gap = scale / 16.0;
+    let camera = Camera2D::from_display_rect(Rect {
+        x: -size / 2.0 - gap,
+        y: -size / 2.0 - gap,
+        w: size + gap * 2.0,
+        h: size + gap * 2.0,
+    });
+    set_camera(&camera);
 
     // Physics
     let mut phys = Physics::default();
-    dbg!(&phys.integration_parameters.dt);
-    // TODO: what are units here / what is the right value?
-    phys.integration_parameters.set_inv_dt(1.0);
-    let blob = Blob::new(vector![w / 2.0, h / 2.0], 20.0, &mut phys);
 
-    // Add walls
-    let mut walls: Vec<ColliderHandle> = Vec::new();
-    // bottom
-    let collider = ColliderBuilder::cuboid(size, 5.0)
-        .translation(vector![gap, gap])
-        .friction(0.0)
-        .restitution(1.0)
-        .build();
-    let handle = phys.colliders.insert(collider);
-    walls.push(handle);
-    // top
-    let collider = ColliderBuilder::cuboid(size, 5.0)
-        .translation(vector![gap, scale - gap])
-        .friction(0.0)
-        .restitution(1.0)
-        .build();
-    let handle = phys.colliders.insert(collider);
-    walls.push(handle);
-    // left
-    let collider = ColliderBuilder::cuboid(size, 5.0)
-        .translation(vector![gap, gap])
-        .rotation(FRAC_PI_2)
-        .friction(0.0)
-        .restitution(1.0)
-        .build();
-    let handle = phys.colliders.insert(collider);
-    walls.push(handle);
-    // right
-    let collider = ColliderBuilder::cuboid(size, 5.0)
-        .translation(vector![scale - gap, gap])
-        .rotation(FRAC_PI_2)
-        .friction(0.0)
-        .restitution(1.0)
-        .build();
-    let handle = phys.colliders.insert(collider);
-    walls.push(handle);
-
-    // Initial state
+    // Blob
+    let blob = Blob::new(vector![0.0, 0.0], 5.0e-1, &mut phys);
     let ball_body = &mut phys.bodies[blob.center];
     ball_body.reset_forces(true);
     ball_body.reset_torques(true);
-    ball_body.apply_impulse(vector![-10000.0, 0.0], true);
+    ball_body.apply_impulse(vector![-3.0, 5.0], true);
+
+    // Add walls
+    let mut walls: Vec<ColliderHandle> = Vec::new();
+    let wall_builder = ColliderBuilder::cuboid(size, 1.0e-3)
+        .friction(0.0)
+        .restitution(1.0);
+    // bottom
+    let collider = wall_builder
+        .clone()
+        .translation(vector![-size / 2.0, -size / 2.0]);
+    let handle = phys.colliders.insert(collider);
+    walls.push(handle);
+    // top
+    let collider = wall_builder
+        .clone()
+        .translation(vector![-size / 2.0, size / 2.0]);
+    let handle = phys.colliders.insert(collider);
+    walls.push(handle);
+    // left
+    let collider = wall_builder
+        .clone()
+        .rotation(-FRAC_PI_2)
+        .translation(vector![-size / 2.0, -size / 2.0]);
+    let handle = phys.colliders.insert(collider);
+    walls.push(handle);
+    // right
+    let collider = wall_builder
+        .clone()
+        .rotation(FRAC_PI_2)
+        .translation(vector![size / 2.0, -size / 2.0]);
+    let handle = phys.colliders.insert(collider);
+    walls.push(handle);
 
     loop {
         phys.step();
 
-        let ball_body = &mut phys.bodies[blob.center];
         clear_background(BLACK);
 
-        draw_circle(
-            ball_body.position().translation.vector.x,
-            ball_body.position().translation.vector.y,
-            15.0,
-            BLUE,
-        );
-
-        for wall in walls.iter() {
-            let body = &phys.colliders[*wall];
-            draw_rectangle_ex(
-                body.position().translation.x,
-                body.position().translation.y,
-                size,
-                5.0,
-                DrawRectangleParams {
-                    offset: vec2(0.0, 0.0),
-                    rotation: body.position().rotation.angle(),
-                    color: RED,
-                },
-            )
-        }
+        blob.draw(&mut phys);
 
         next_frame().await
     }
