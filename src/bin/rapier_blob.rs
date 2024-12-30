@@ -1,4 +1,7 @@
-use std::f32::consts::{FRAC_PI_2, PI};
+use std::{
+    f32::consts::{FRAC_PI_2, PI},
+    num::NonZeroUsize,
+};
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -49,7 +52,14 @@ struct Blob {
     radius: Real,
 }
 impl Blob {
-    fn new(center: Vector2<Real>, radius: Real, shell_size: u32, world: &mut Physics) -> Self {
+    fn new(
+        center: Vector2<Real>,
+        radius: Real,
+        shell_size: u32,
+        stiffness: f32,
+        damping: f32,
+        world: &mut Physics,
+    ) -> Self {
         // central ball
         let central_body = RigidBodyBuilder::dynamic().translation(center);
         let handle_center = world.bodies.insert(central_body);
@@ -62,10 +72,10 @@ impl Blob {
             .insert_with_parent(collider, handle_center, &mut world.bodies);
 
         // Shell
-        let stiffness = 2.0;
-        let damping = 2.0;
+        // let stiffness = 150.0;
+        // let damping = 2.0;
         let shell_step = PI * 2.0 / shell_size as f32;
-        let base_distance = 2.0 * radius;
+        let base_distance = 2.5 * radius;
         let mut shells = Vec::<RigidBodyHandle>::new();
         for i in 0..shell_size {
             let x = (shell_step * i as f32).cos();
@@ -150,7 +160,7 @@ impl Blob {
 #[macroquad::main("_floating_")]
 async fn main() {
     // Dimensions
-    let size: f32 = 20.0;
+    let size: f32 = 40.0;
     let gap: f32 = 0.0;
     request_new_screen_size(800.0, 800.0);
     let camera = Camera2D::from_display_rect(Rect {
@@ -163,13 +173,15 @@ async fn main() {
 
     // Physics
     let mut phys = Physics::default();
+    // phys.integration_parameters.contact_damping_ratio = 10.0;
+    phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(10).unwrap();
 
     // Blob
-    let blob = Blob::new(vector![0.0, 0.0], 5.0e-1, 10, &mut phys);
+    let blob = Blob::new(vector![0.0, 0.0], 5.0e-1, 10, 300.0, 2.0, &mut phys);
     let ball_body = &mut phys.bodies[blob.center];
     ball_body.reset_forces(true);
     ball_body.reset_torques(true);
-    ball_body.apply_impulse(vector![-3.0, 5.0], true);
+    ball_body.apply_impulse(vector![-3.0, 5.0] * 10.0, true);
     // ball_body.apply_impulse(vector![5.0, 0.0], true);
 
     // Add walls
