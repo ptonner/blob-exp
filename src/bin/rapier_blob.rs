@@ -6,7 +6,7 @@ use std::{
 use itertools::Itertools;
 use macroquad::prelude::*;
 use macroquad::rand;
-use macroquad::ui::{hash, root_ui, widgets::Window};
+use macroquad::ui::{hash, root_ui};
 use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
@@ -64,7 +64,9 @@ impl Blob {
         world: &mut Physics,
     ) -> Self {
         // central ball
-        let central_body = RigidBodyBuilder::dynamic().translation(center);
+        let central_body = RigidBodyBuilder::dynamic()
+            .translation(center)
+            .lock_rotations();
         let handle_center = world.bodies.insert(central_body);
         let collider = ColliderBuilder::ball(radius)
             .friction(0.0)
@@ -84,7 +86,9 @@ impl Blob {
             let x = (shell_step * i as f32).cos();
             let y = (shell_step * i as f32).sin();
             let offset = Vector2::new(x, y) * base_distance;
-            let shell = RigidBodyBuilder::dynamic().translation(center + offset);
+            let shell = RigidBodyBuilder::dynamic()
+                .translation(center + offset)
+                .lock_rotations();
             let handle_shell = world.bodies.insert(shell);
             let collider = ColliderBuilder::ball(radius * 0.5)
                 .friction(0.0)
@@ -165,7 +169,13 @@ impl Blob {
     }
 }
 
-fn init(size: f32, num_splits: u32, log_radius: f32, impulse: f32) -> (Physics, Vec<Blob>) {
+fn init(
+    size: f32,
+    num_splits: u32,
+    shell_size: u32,
+    log_radius: f32,
+    impulse: f32,
+) -> (Physics, Vec<Blob>) {
     let mut phys = Physics::default();
     phys.integration_parameters.contact_damping_ratio = 1.0e-1;
     phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(10).unwrap();
@@ -180,7 +190,7 @@ fn init(size: f32, num_splits: u32, log_radius: f32, impulse: f32) -> (Physics, 
                         + size / 2.0 / num_splits as f32
                 ],
                 10.0_f32.powf(log_radius),
-                12,
+                shell_size,
                 100.0,
                 2.0,
                 1.0,
@@ -239,7 +249,6 @@ async fn main() {
     let gap: f32 = 0.0;
     request_new_screen_size(800.0, 800.0);
     let dialog_size = vec2(200., 200.);
-    let screen_size = vec2(800.0, 800.0);
     let dialog_position = vec2(0.0, 0.0);
     let camera = Camera2D::from_display_rect(Rect {
         x: -size / 2.0 - gap,
@@ -251,9 +260,10 @@ async fn main() {
 
     // Simulation
     let mut num_splits = 6;
+    let mut shell_size = 12;
     let mut log_radius = 0.0;
     let mut impulse = 1.0;
-    let (mut phys, mut blobs) = init(size, num_splits, log_radius, impulse);
+    let (mut phys, mut blobs) = init(size, num_splits, shell_size, log_radius, impulse);
 
     loop {
         phys.step();
@@ -263,10 +273,11 @@ async fn main() {
         // ui
         root_ui().window(hash!(), dialog_position, dialog_size, |ui| {
             ui.drag(hash!(), "splits", Some((1, 12)), &mut num_splits);
-            ui.slider(hash!(), "log radius", -2f32..0f32, &mut log_radius);
+            ui.drag(hash!(), "shell size", Some((6, 24)), &mut shell_size);
+            ui.slider(hash!(), "log radius", -2f32..1f32, &mut log_radius);
             ui.slider(hash!(), "impulse", 0.5f32..15.0f32, &mut impulse);
             if ui.button(None, "reset") {
-                let (p, b) = init(size, num_splits, log_radius, impulse);
+                let (p, b) = init(size, num_splits, shell_size, log_radius, impulse);
                 phys = p;
                 blobs = b;
             }

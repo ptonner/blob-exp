@@ -1,5 +1,5 @@
 [package]
-name = "blob-exp"
+name = "blobs"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,4 +10,10 @@ rapier2d = "0.22.0"
 
 [[bin]]
 name = "rapier_init"
+
+[[bin]]
+name = "rapier_blob"
+
+[[bin]]
+name = "blob"
 
