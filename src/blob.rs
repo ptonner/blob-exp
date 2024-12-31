@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, num::NonZeroUsize, vec::IntoIter};
+use std::{f32::consts::PI, num::NonZeroUsize};
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -8,25 +8,45 @@ use rapier2d::prelude::*;
 use crate::phys::Physics;
 
 /// The base blob component, with many connected nodes forming a single blob
-// type BlobNode = RigidBodyHandle;
-#[derive(Clone, Copy)]
-pub struct BlobNode {
-    body: RigidBodyHandle,
-    radius: Real,
+type BlobNode = RigidBodyHandle;
+// #[derive(Clone, Copy)]
+// pub struct BlobNode {
+//     body: RigidBodyHandle,
+//     radius: Real,
+// }
+
+fn draw_node(node: &BlobNode, phys: &Physics) {
+    let body = phys.get_body(node);
+    for c in body.colliders() {
+        let col = &phys.colliders[*c];
+        let shape = col.shape();
+        match shape.as_typed_shape() {
+            TypedShape::Ball(ball) => {
+                draw_circle(
+                    body.position().translation.vector.x,
+                    body.position().translation.vector.y,
+                    ball.radius,
+                    BLUE,
+                );
+            }
+            _ => todo!(),
+        }
+    }
 }
 
-impl BlobNode {
-    fn get_body<'a>(&self, phys: &'a Physics) -> &'a RigidBody {
-        &phys.bodies[self.body]
+impl Physics {
+    fn get_body(&self, node: &BlobNode) -> &RigidBody {
+        &self.bodies[*node]
     }
-    fn get_body_mut<'a>(&self, phys: &'a mut Physics) -> &'a mut RigidBody {
-        &mut phys.bodies[self.body]
+    fn get_body_mut(&mut self, node: &BlobNode) -> &mut RigidBody {
+        &mut self.bodies[*node]
     }
 }
 
 /// A single blob layer
 type Layer = Vec<BlobNode>;
 
+/// A joint connecting two nodes
 type Joint = (BlobNode, BlobNode);
 
 pub struct Blob {
@@ -47,6 +67,7 @@ impl Blob {
             layer_nodes.collect()
         }
     }
+
     pub fn total_mass(&self, phys: &Physics) -> f32 {
         let mut mass = self
             .layers
@@ -54,32 +75,27 @@ impl Blob {
             .map(|layer| {
                 layer
                     .iter()
-                    .map(|node| node.get_body(&phys).mass())
+                    .map(|node| phys.get_body(node).mass())
                     .sum::<Real>()
             })
             .sum();
         if let Some(c) = self.center {
-            mass += c.get_body(&phys).mass();
+            mass += phys.get_body(&c).mass();
         }
         return mass;
     }
+
     pub fn apply_impulse(&self, imp: Vector2<Real>, phys: &mut Physics) {
         for node in self.all_nodes() {
-            let ball_body = node.get_body_mut(phys);
+            let ball_body = phys.get_body_mut(&node);
             ball_body.apply_impulse(imp, true);
         }
-        // if let Some(c) = self.center {
-        //     let ball_body = c.get_body_mut(phys);
-        //     ball_body.apply_impulse(imp, true);
-        //     return;
-        // }
-        // todo!();
     }
+
     pub fn draw(&self, phys: &Physics) {
-        // let bodies = &mut phys.bodies;
         for (n1, n2) in self.joints.iter() {
-            let b1 = n1.get_body(phys);
-            let b2 = n2.get_body(phys);
+            let b1 = phys.get_body(&n1);
+            let b2 = phys.get_body(&n2);
             draw_line(
                 b1.position().translation.vector.x,
                 b1.position().translation.vector.y,
@@ -92,24 +108,12 @@ impl Blob {
 
         for layer in self.layers.iter() {
             for node in layer.iter() {
-                let body = node.get_body(&phys);
-                draw_circle(
-                    body.position().translation.vector.x,
-                    body.position().translation.vector.y,
-                    node.radius,
-                    SKYBLUE,
-                );
+                draw_node(node, phys);
             }
         }
 
         if let Some(c) = self.center {
-            let body = c.get_body(&phys);
-            draw_circle(
-                body.position().translation.vector.x,
-                body.position().translation.vector.y,
-                c.radius,
-                BLUE,
-            );
+            draw_node(&c, phys);
         }
     }
 }
@@ -165,23 +169,19 @@ impl BlobBuilder {
             .mass(1.0);
         phys.colliders
             .insert_with_parent(collider, handle, &mut phys.bodies);
-        return BlobNode {
-            body: handle,
-            radius: self.radius,
-        };
+        return handle;
     }
     fn connect_nodes(&self, node1: BlobNode, node2: BlobNode, phys: &mut Physics) {
         // let bodies = &mut phys.bodies;
-        let b1 = node1.get_body(phys);
-        let b2 = node2.get_body(phys);
+        let b1 = phys.get_body(&node1);
+        let b2 = phys.get_body(&node2);
         // let b1 = &bodies[node1];
         // let b2 = &bodies[node2];
         let dist = (b1.position().translation.to_homogeneous()
             - b2.position().translation.to_homogeneous())
         .magnitude();
         let joint = SpringJointBuilder::new(dist, self.stiffness, self.damping);
-        phys.impulse_joints
-            .insert(node1.body, node2.body, joint, true);
+        phys.impulse_joints.insert(node1, node2, joint, true);
     }
     pub fn build(&self, phys: &mut Physics) -> Blob {
         // build center
