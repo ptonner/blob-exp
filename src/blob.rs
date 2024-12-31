@@ -9,13 +9,9 @@ use crate::phys::Physics;
 
 /// The base blob component, with many connected nodes forming a single blob
 type BlobNode = RigidBodyHandle;
-// #[derive(Clone, Copy)]
-// pub struct BlobNode {
-//     body: RigidBodyHandle,
-//     radius: Real,
-// }
 
-fn draw_node(node: &BlobNode, phys: &Physics) {
+/// Draw a node based on its colliders
+fn draw_node_colliders(node: &BlobNode, phys: &Physics, color: Color) {
     let body = phys.get_body(node);
     for c in body.colliders() {
         let col = &phys.colliders[*c];
@@ -26,7 +22,7 @@ fn draw_node(node: &BlobNode, phys: &Physics) {
                     body.position().translation.vector.x,
                     body.position().translation.vector.y,
                     ball.radius,
-                    BLUE,
+                    color,
                 );
             }
             _ => todo!(),
@@ -108,12 +104,12 @@ impl Blob {
 
         for layer in self.layers.iter() {
             for node in layer.iter() {
-                draw_node(node, phys);
+                draw_node_colliders(node, phys, SKYBLUE);
             }
         }
 
         if let Some(c) = self.center {
-            draw_node(&c, phys);
+            draw_node_colliders(&c, phys, BLUE);
         }
     }
 }
