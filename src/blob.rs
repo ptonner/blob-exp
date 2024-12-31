@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, num::NonZeroUsize};
+use std::{f32::consts::PI, num::NonZeroUsize, vec::IntoIter};
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -10,7 +10,7 @@ use crate::phys::Physics;
 /// The base blob component, with many connected nodes forming a single blob
 // type BlobNode = RigidBodyHandle;
 #[derive(Clone, Copy)]
-struct BlobNode {
+pub struct BlobNode {
     body: RigidBodyHandle,
     radius: Real,
 }
@@ -39,6 +39,14 @@ pub struct Blob {
 }
 
 impl Blob {
+    pub fn all_nodes(&self) -> Vec<BlobNode> {
+        let layer_nodes = self.layers.clone().into_iter().flatten();
+        if let Some(c) = self.center {
+            layer_nodes.chain(vec![c].into_iter()).collect()
+        } else {
+            layer_nodes.collect()
+        }
+    }
     pub fn total_mass(&self, phys: &Physics) -> f32 {
         let mut mass = self
             .layers
@@ -56,14 +64,16 @@ impl Blob {
         return mass;
     }
     pub fn apply_impulse(&self, imp: Vector2<Real>, phys: &mut Physics) {
-        if let Some(c) = self.center {
-            let ball_body = c.get_body_mut(phys);
-            // ball_body.reset_forces(true);
-            // ball_body.reset_torques(true);
+        for node in self.all_nodes() {
+            let ball_body = node.get_body_mut(phys);
             ball_body.apply_impulse(imp, true);
-            return;
         }
-        todo!();
+        // if let Some(c) = self.center {
+        //     let ball_body = c.get_body_mut(phys);
+        //     ball_body.apply_impulse(imp, true);
+        //     return;
+        // }
+        // todo!();
     }
     pub fn draw(&self, phys: &Physics) {
         // let bodies = &mut phys.bodies;

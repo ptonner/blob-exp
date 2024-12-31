@@ -109,7 +109,7 @@ async fn main() {
     let mut log_radius = -0.5;
     let mut center_gap = 2.0;
     let mut layer_gap = 1.0;
-    let mut impulse = 2.0;
+    let mut impulse = 0.1;
     let mut run = true;
     let mut step_size = 10;
     let (mut phys, mut blobs) = init(
@@ -131,7 +131,7 @@ async fn main() {
             ui.slider(hash!(), "center gap", 0.1..10.0, &mut center_gap);
             ui.slider(hash!(), "layer gap", 0.1..3.0, &mut layer_gap);
             ui.slider(hash!(), "log radius", -2f32..1f32, &mut log_radius);
-            ui.slider(hash!(), "impulse", 0.5f32..15.0f32, &mut impulse);
+            ui.slider(hash!(), "impulse", 0.05f32..1.25f32, &mut impulse);
             ui.drag(hash!(), "step size", Some((0, 50)), &mut step_size);
             if ui.button(None, "reset") {
                 let (p, b) = init(
