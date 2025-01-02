@@ -1,4 +1,7 @@
-use std::{f32::consts::PI, num::NonZeroUsize};
+use std::{
+    f32::consts::{FRAC_PI_2, PI},
+    num::NonZeroUsize,
+};
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -16,13 +19,32 @@ fn draw_node_from_colliders(node: &BlobNode, phys: &Physics, color: Color) {
     for c in body.colliders() {
         let col = &phys.colliders[*c];
         let shape = col.shape();
+        let position = body.position();
+        let angle = col.position().rotation.angle();
         match shape.as_typed_shape() {
             TypedShape::Ball(ball) => {
                 draw_circle(
-                    body.position().translation.vector.x,
-                    body.position().translation.vector.y,
+                    position.translation.vector.x,
+                    position.translation.vector.y,
                     ball.radius,
                     color,
+                );
+            }
+            TypedShape::Cuboid(cuboid) => {
+                let extents = cuboid.half_extents;
+                draw_rectangle_ex(
+                    position.translation.vector.x,
+                    position.translation.vector.y,
+                    extents.x * 2.0,
+                    extents.y * 2.0,
+                    DrawRectangleParams {
+                        // offset is applied before width/height scaling, so
+                        // this says move back by half the extent in both x and
+                        // y directions
+                        offset: vec2(0.5, 0.5),
+                        rotation: angle,
+                        color,
+                    },
                 );
             }
             _ => todo!(),
@@ -155,11 +177,14 @@ pub struct BlobNodeBuilder {
 }
 
 impl BlobNodeBuilder {
-    fn build(&self, center: Vector2<Real>, phys: &mut Physics) -> BlobNode {
+    fn build(&self, center: Vector2<Real>, angle: f32, phys: &mut Physics) -> BlobNode {
         let body = self.body_builder.clone().translation(center).build();
         let handle = phys.bodies.insert(body);
-        phys.colliders
-            .insert_with_parent(self.collider_builder.build(), handle, &mut phys.bodies);
+        phys.colliders.insert_with_parent(
+            self.collider_builder.clone().rotation(angle).build(),
+            handle,
+            &mut phys.bodies,
+        );
         return handle;
     }
 }
@@ -239,22 +264,6 @@ impl Default for BlobBuilder {
 }
 
 impl BlobBuilder {
-    // TODO: modifying field methods
-
-    // Construction operations
-    // fn build_node(&self, center: Vector2<Real>, phys: &mut Physics) -> BlobNode {
-    //     let body = RigidBodyBuilder::dynamic().translation(center);
-    //     let handle = phys.bodies.insert(body);
-    //     let collider = ColliderBuilder::ball(self.radius)
-    //         // TODO: make these parameters part of the builder
-    //         .friction(0.0)
-    //         .restitution(1.0)
-    //         .mass(1.0);
-    //     phys.colliders
-    //         .insert_with_parent(collider, handle, &mut phys.bodies);
-    //     return handle;
-    // }
-
     fn connect_nodes(
         &self,
         node1: BlobNode,
@@ -271,9 +280,6 @@ impl BlobBuilder {
         .unwrap();
         let joint: GenericJoint = match spec {
             BlobJointSpec::SpringJoint { stiffness, damping } => {
-                // let axis = b1.position().translation.to_homogeneous()
-                //     - b2.position().translation.to_homogeneous();
-                // let dist = axis.magnitude();
                 SpringJointBuilder::new(direction.magnitude(), *stiffness, *damping)
                     .build()
                     .into()
@@ -290,7 +296,7 @@ impl BlobBuilder {
         let mut center = None;
         if self.include_center {
             // center = Some(self.build_node(self.center, phys));
-            center = Some(self.internal_node_builder.build(self.center, phys));
+            center = Some(self.internal_node_builder.build(self.center, 0.0, phys));
         }
 
         // build layers
@@ -304,15 +310,17 @@ impl BlobBuilder {
 
             // build layer
             for i in 0..self.layer_size.into() {
-                let x = (shell_step * i as f32).cos();
-                let y = (shell_step * i as f32).sin();
+                let angle = shell_step * i as f32;
+                let x = angle.cos();
+                let y = angle.sin();
                 let offset = Vector2::new(x, y) * distance + self.center;
+                // this angle is oriented towards the center
+                let local_angle = angle + FRAC_PI_2;
                 let node = if l == self.num_layers {
-                    self.external_node_builder.build(offset, phys)
+                    self.external_node_builder.build(offset, local_angle, phys)
                 } else {
-                    self.internal_node_builder.build(offset, phys)
+                    self.internal_node_builder.build(offset, local_angle, phys)
                 };
-                // layer.push(self.build_node(offset, phys));
                 layer.push(node);
             }
 
@@ -340,16 +348,6 @@ impl BlobBuilder {
                         joints.push((*p, *n));
                     }
                 }
-                // // connect to direct parent
-                // for (p, n) in layer.iter().zip(prev_layer) {
-                //     self.connect_nodes(*p, *n, phys);
-                //     joints.push((*p, *n));
-                // }
-                // // connect to one forward parent
-                // for (p, n) in layer.iter().zip(prev_layer.iter().cycle().skip(1)) {
-                //     self.connect_nodes(*p, *n, phys);
-                //     joints.push((*p, *n));
-                // }
             }
 
             // prep for next layer

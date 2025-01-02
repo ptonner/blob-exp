@@ -7,7 +7,7 @@ use macroquad::ui::{hash, root_ui};
 use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
-use blobs::blob::{Blob, BlobBuilder};
+use blobs::blob::{Blob, BlobBuilder, BlobNodeBuilder};
 use blobs::phys::Physics;
 
 fn init(
@@ -42,6 +42,10 @@ fn init(
                 layer_gap,
                 layer_size: NonZeroUsize::new(shell_size as usize)
                     .unwrap_or(NonZeroUsize::new(12).unwrap()),
+                external_node_builder: BlobNodeBuilder {
+                    body_builder: RigidBodyBuilder::dynamic(),
+                    collider_builder: ColliderBuilder::cuboid(1.0, 1.0e-1),
+                },
                 ..Default::default()
             };
             let blob = builder.build(&mut phys);
