@@ -21,8 +21,11 @@ fn init(
     impulse: f32,
 ) -> (Physics, Vec<Blob>) {
     let mut phys = Physics::default();
-    phys.integration_parameters.contact_damping_ratio = 1.0e-1;
-    phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(10).unwrap();
+    // phys.integration_parameters.contact_damping_ratio = 1.0e2;
+    // phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(4).unwrap();
+    phys.integration_parameters
+        .num_internal_stabilization_iterations = 20;
+    // phys.integration_parameters.max_ccd_substeps = 50;
 
     let mut blobs = Vec::<Blob>::new();
     for i in 0..num_splits {
@@ -89,7 +92,7 @@ fn init(
 #[macroquad::main("_floating_")]
 async fn main() {
     // Dimensions
-    let size: f32 = 50.0;
+    let size: f32 = 10.0;
     let gap: f32 = 0.0;
     request_new_screen_size(800.0, 800.0);
     let dialog_size = vec2(200., 200.);
@@ -103,13 +106,13 @@ async fn main() {
     set_camera(&camera);
 
     // Simulation
-    let mut num_splits = 2;
-    let mut num_layers = 2;
-    let mut shell_size = 12;
+    let mut num_splits = 1;
+    let mut num_layers = 1;
+    let mut shell_size = 16;
     let mut log_radius = -0.5;
     let mut center_gap = 2.0;
     let mut layer_gap = 1.0;
-    let mut impulse = 0.1;
+    let mut impulse = 0.5;
     let mut run = true;
     let mut step_size = 10;
     let (mut phys, mut blobs) = init(
@@ -126,12 +129,12 @@ async fn main() {
         // ui
         root_ui().window(hash!(), dialog_position, dialog_size, |ui| {
             ui.drag(hash!(), "splits", Some((1, 12)), &mut num_splits);
-            ui.drag(hash!(), "shell size", Some((6, 24)), &mut shell_size);
+            ui.drag(hash!(), "shell size", Some((1, 24)), &mut shell_size);
             ui.drag(hash!(), "num layers", Some((1, 4)), &mut num_layers);
             ui.slider(hash!(), "center gap", 0.1..10.0, &mut center_gap);
             ui.slider(hash!(), "layer gap", 0.1..3.0, &mut layer_gap);
             ui.slider(hash!(), "log radius", -2f32..1f32, &mut log_radius);
-            ui.slider(hash!(), "impulse", 0.05f32..1.25f32, &mut impulse);
+            ui.slider(hash!(), "impulse", 0.0f32..5.0f32, &mut impulse);
             ui.drag(hash!(), "step size", Some((0, 50)), &mut step_size);
             if ui.button(None, "reset") {
                 let (p, b) = init(
