@@ -92,7 +92,7 @@ fn init(
 #[macroquad::main("_floating_")]
 async fn main() {
     // Dimensions
-    let size: f32 = 10.0;
+    let size: f32 = 20.0;
     let gap: f32 = 0.0;
     request_new_screen_size(800.0, 800.0);
     let dialog_size = vec2(200., 200.);
@@ -108,9 +108,9 @@ async fn main() {
     // Simulation
     let mut num_splits = 1;
     let mut num_layers = 1;
-    let mut shell_size = 16;
+    let mut shell_size = 12;
     let mut log_radius = -0.5;
-    let mut center_gap = 2.0;
+    let mut center_gap = 4.0;
     let mut layer_gap = 1.0;
     let mut impulse = 0.5;
     let mut run = true;

@@ -1,4 +1,4 @@
-use std::{default, f32::consts::PI, num::NonZeroUsize};
+use std::{f32::consts::PI, num::NonZeroUsize};
 
 use itertools::Itertools;
 use macroquad::prelude::*;
@@ -11,7 +11,7 @@ use crate::phys::Physics;
 type BlobNode = RigidBodyHandle;
 
 /// Draw a node based on its colliders
-fn draw_node_colliders(node: &BlobNode, phys: &Physics, color: Color) {
+fn draw_node_from_colliders(node: &BlobNode, phys: &Physics, color: Color) {
     let body = phys.get_body(node);
     for c in body.colliders() {
         let col = &phys.colliders[*c];
@@ -104,12 +104,12 @@ impl Blob {
 
         for layer in self.layers.iter() {
             for node in layer.iter() {
-                draw_node_colliders(node, phys, SKYBLUE);
+                draw_node_from_colliders(node, phys, SKYBLUE);
             }
         }
 
         if let Some(c) = self.center {
-            draw_node_colliders(&c, phys, BLUE);
+            draw_node_from_colliders(&c, phys, BLUE);
         }
     }
 }
@@ -149,6 +149,33 @@ impl From<PrismaticSpringJoint> for GenericJoint {
     }
 }
 
+pub struct BlobNodeBuilder {
+    pub body_builder: RigidBodyBuilder,
+    pub collider_builder: ColliderBuilder,
+}
+
+impl BlobNodeBuilder {
+    fn build(&self, center: Vector2<Real>, phys: &mut Physics) -> BlobNode {
+        let body = self.body_builder.clone().translation(center).build();
+        let handle = phys.bodies.insert(body);
+        phys.colliders
+            .insert_with_parent(self.collider_builder.build(), handle, &mut phys.bodies);
+        return handle;
+    }
+}
+
+impl Default for BlobNodeBuilder {
+    fn default() -> Self {
+        Self {
+            body_builder: RigidBodyBuilder::dynamic(),
+            collider_builder: ColliderBuilder::ball(1.0)
+                .friction(0.0)
+                .restitution(1.0)
+                .mass(1.0),
+        }
+    }
+}
+
 /// Specification for a blob joint
 pub enum BlobJointSpec {
     SpringJoint { stiffness: f32, damping: f32 },
@@ -179,6 +206,10 @@ pub struct BlobBuilder {
     pub include_circumferential_joints: bool,
     /// The number of cross layer connections
     pub cross_layer_connections: usize,
+    /// External node builder
+    pub external_node_builder: BlobNodeBuilder,
+    /// Internal node builder
+    pub internal_node_builder: BlobNodeBuilder,
 }
 
 impl Default for BlobBuilder {
@@ -201,6 +232,8 @@ impl Default for BlobBuilder {
             },
             include_circumferential_joints: false,
             cross_layer_connections: 1,
+            external_node_builder: BlobNodeBuilder::default(),
+            internal_node_builder: BlobNodeBuilder::default(),
         }
     }
 }
@@ -209,18 +242,18 @@ impl BlobBuilder {
     // TODO: modifying field methods
 
     // Construction operations
-    fn build_node(&self, center: Vector2<Real>, phys: &mut Physics) -> BlobNode {
-        let body = RigidBodyBuilder::dynamic().translation(center);
-        let handle = phys.bodies.insert(body);
-        let collider = ColliderBuilder::ball(self.radius)
-            // TODO: make these parameters part of the builder
-            .friction(0.0)
-            .restitution(1.0)
-            .mass(1.0);
-        phys.colliders
-            .insert_with_parent(collider, handle, &mut phys.bodies);
-        return handle;
-    }
+    // fn build_node(&self, center: Vector2<Real>, phys: &mut Physics) -> BlobNode {
+    //     let body = RigidBodyBuilder::dynamic().translation(center);
+    //     let handle = phys.bodies.insert(body);
+    //     let collider = ColliderBuilder::ball(self.radius)
+    //         // TODO: make these parameters part of the builder
+    //         .friction(0.0)
+    //         .restitution(1.0)
+    //         .mass(1.0);
+    //     phys.colliders
+    //         .insert_with_parent(collider, handle, &mut phys.bodies);
+    //     return handle;
+    // }
 
     fn connect_nodes(
         &self,
@@ -256,7 +289,8 @@ impl BlobBuilder {
         // build center
         let mut center = None;
         if self.include_center {
-            center = Some(self.build_node(self.center, phys));
+            // center = Some(self.build_node(self.center, phys));
+            center = Some(self.internal_node_builder.build(self.center, phys));
         }
 
         // build layers
@@ -265,7 +299,7 @@ impl BlobBuilder {
         let mut distance = self.center_gap;
         // place in equal spaced circle
         let shell_step = PI * 2.0 / self.layer_size.get() as f32;
-        for _l in 0..self.num_layers {
+        for l in 1..=self.num_layers {
             let mut layer = Layer::new();
 
             // build layer
@@ -273,7 +307,13 @@ impl BlobBuilder {
                 let x = (shell_step * i as f32).cos();
                 let y = (shell_step * i as f32).sin();
                 let offset = Vector2::new(x, y) * distance + self.center;
-                layer.push(self.build_node(offset, phys));
+                let node = if l == self.num_layers {
+                    self.external_node_builder.build(offset, phys)
+                } else {
+                    self.internal_node_builder.build(offset, phys)
+                };
+                // layer.push(self.build_node(offset, phys));
+                layer.push(node);
             }
 
             // if first layer and there is a center, connect them
