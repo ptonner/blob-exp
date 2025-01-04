@@ -8,18 +8,26 @@ use macroquad::prelude::*;
 use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
-use crate::phys::Physics;
-
 /// The base blob component, with many connected nodes forming a single blob
-type BlobNode = RigidBodyHandle;
+pub type BlobNode = RigidBodyHandle;
+
+/// Trait for physics object compatible with blob simulations
+pub trait BlobPhysics {
+    fn add_node(&mut self, builder: &BlobNodeBuilder) -> BlobNode;
+    fn add_joint(&mut self, node1: &BlobNode, node2: &BlobNode, joint: GenericJoint);
+    fn get_body(&self, node: &BlobNode) -> &RigidBody;
+    fn get_body_mut(&mut self, node: &BlobNode) -> &mut RigidBody;
+    fn get_collider(&self, node: &ColliderHandle) -> &Collider;
+    fn get_collider_mut(&mut self, node: &ColliderHandle) -> &mut Collider;
+    fn get_colliders(&self, node: &BlobNode) -> Vec<&Collider>;
+}
 
 /// Draw a node based on its colliders
-fn draw_node_from_colliders(node: &BlobNode, phys: &Physics, color: Color) {
+fn draw_node_from_colliders<T: BlobPhysics>(node: &BlobNode, phys: &T, color: Color) {
     let body = phys.get_body(node);
-    for c in body.colliders() {
-        let col = &phys.colliders[*c];
+    let position = body.position();
+    for col in phys.get_colliders(node) {
         let shape = col.shape();
-        let position = body.position();
         let angle = col.position().rotation.angle();
         match shape.as_typed_shape() {
             TypedShape::Ball(ball) => {
@@ -52,15 +60,6 @@ fn draw_node_from_colliders(node: &BlobNode, phys: &Physics, color: Color) {
     }
 }
 
-impl Physics {
-    fn get_body(&self, node: &BlobNode) -> &RigidBody {
-        &self.bodies[*node]
-    }
-    fn get_body_mut(&mut self, node: &BlobNode) -> &mut RigidBody {
-        &mut self.bodies[*node]
-    }
-}
-
 /// A single blob layer
 type Layer = Vec<BlobNode>;
 
@@ -86,7 +85,7 @@ impl Blob {
         }
     }
 
-    pub fn total_mass(&self, phys: &Physics) -> f32 {
+    pub fn total_mass<T: BlobPhysics>(&self, phys: &T) -> f32 {
         let mut mass = self
             .layers
             .iter()
@@ -103,14 +102,14 @@ impl Blob {
         return mass;
     }
 
-    pub fn apply_impulse(&self, imp: Vector2<Real>, phys: &mut Physics) {
+    pub fn apply_impulse<T: BlobPhysics>(&self, imp: Vector2<Real>, phys: &mut T) {
         for node in self.all_nodes() {
             let ball_body = phys.get_body_mut(&node);
             ball_body.apply_impulse(imp, true);
         }
     }
 
-    pub fn draw(&self, phys: &Physics) {
+    pub fn draw<T: BlobPhysics>(&self, phys: &T) {
         for (n1, n2) in self.joints.iter() {
             let b1 = phys.get_body(&n1);
             let b2 = phys.get_body(&n2);
@@ -177,15 +176,15 @@ pub struct BlobNodeBuilder {
 }
 
 impl BlobNodeBuilder {
-    fn build(&self, center: Vector2<Real>, angle: f32, phys: &mut Physics) -> BlobNode {
-        let body = self.body_builder.clone().translation(center).build();
-        let handle = phys.bodies.insert(body);
-        phys.colliders.insert_with_parent(
-            self.collider_builder.clone().rotation(angle).build(),
-            handle,
-            &mut phys.bodies,
-        );
-        return handle;
+    fn build<T: BlobPhysics>(
+        &mut self,
+        center: Vector2<Real>,
+        angle: f32,
+        phys: &mut T,
+    ) -> BlobNode {
+        self.body_builder = self.body_builder.clone().translation(center);
+        self.collider_builder = self.collider_builder.clone().rotation(angle);
+        phys.add_node(&self)
     }
 }
 
@@ -264,12 +263,12 @@ impl Default for BlobBuilder {
 }
 
 impl BlobBuilder {
-    fn connect_nodes(
+    fn connect_nodes<T: BlobPhysics>(
         &self,
         node1: BlobNode,
         node2: BlobNode,
         spec: &BlobJointSpec,
-        phys: &mut Physics,
+        phys: &mut T,
     ) {
         let b1 = phys.get_body(&node1);
         let b2 = phys.get_body(&node2);
@@ -289,9 +288,10 @@ impl BlobBuilder {
             }
         };
 
-        phys.impulse_joints.insert(node1, node2, joint, true);
+        phys.add_joint(&node1, &node2, joint);
     }
-    pub fn build(&self, phys: &mut Physics) -> Blob {
+
+    pub fn build<T: BlobPhysics>(&mut self, phys: &mut T) -> Blob {
         // build center
         let mut center = None;
         if self.include_center {

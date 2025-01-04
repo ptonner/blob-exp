@@ -34,7 +34,7 @@ fn init(
                 size * (i as f32 / num_splits as f32) - size / 2.0 + size / 2.0 / num_splits as f32,
                 size * (j as f32 / num_splits as f32) - size / 2.0 + size / 2.0 / num_splits as f32
             ];
-            let builder = BlobBuilder {
+            let mut builder = BlobBuilder {
                 center,
                 center_gap,
                 radius: (10.0_f32).powf(log_radius),
