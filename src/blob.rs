@@ -8,6 +8,8 @@ use macroquad::prelude::*;
 use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
+use crate::joint::{connect_nodes, BlobJointBuilder, PrismaticSpringJointBuilder};
+
 /// The base blob component, with many connected nodes forming a single blob
 pub type BlobNode = RigidBodyHandle;
 
@@ -70,43 +72,6 @@ impl Blob {
             ball_body.apply_impulse(imp, true);
         }
     }
-
-    
-}
-
-/// A prismatic spring joint for building blob joints with valid motion along a
-/// single axis.
-pub struct PrismaticSpringJoint {
-    pub data: GenericJoint,
-}
-
-impl PrismaticSpringJoint {
-    /// Creates a new prismatic spring joint allowing only relative translations along the specified direction.
-    ///
-    /// This direction is expressed in the local-space of both rigid-bodies.
-    ///
-    /// Spring properties are controled via `stiffness` and `damping`.
-    ///
-    /// NB: A higher value of `num_internal_stabilization_iterations` than the default is recommended for integration parameters when using this joint (i.e. >= 20).
-    pub fn new(direction: Vector<Real>, stiffness: Real, damping: Real) -> Self {
-        let axis = UnitVector::new_normalize(direction);
-        let data = GenericJointBuilder::new(JointAxesMask::LOCKED_PRISMATIC_AXES)
-            // Prismatic construction
-            .local_axis1(axis)
-            .local_axis2(axis)
-            // Spring construction
-            .coupled_axes(JointAxesMask::LIN_AXES)
-            .motor_position(JointAxis::LinX, direction.magnitude(), stiffness, damping)
-            .motor_model(JointAxis::LinX, MotorModel::ForceBased)
-            .build();
-        Self { data }
-    }
-}
-
-impl From<PrismaticSpringJoint> for GenericJoint {
-    fn from(val: PrismaticSpringJoint) -> GenericJoint {
-        val.data
-    }
 }
 
 pub struct BlobNodeBuilder {
@@ -139,12 +104,6 @@ impl Default for BlobNodeBuilder {
     }
 }
 
-/// Specification for a blob joint
-pub enum BlobJointSpec {
-    SpringJoint { stiffness: f32, damping: f32 },
-    PrismaticSpringJoint { stiffness: f32, damping: f32 },
-}
-
 /// The builder object for blobs
 pub struct BlobBuilder {
     /// The node radius
@@ -162,9 +121,9 @@ pub struct BlobBuilder {
     /// Gap between layers of the blob
     pub layer_gap: f32,
     /// The radial joint specification
-    pub radial_joint_spec: BlobJointSpec,
+    pub radial_joint_builder: Box<dyn BlobJointBuilder>,
     /// The circumferential joint specification
-    pub circumferential_joint_spec: BlobJointSpec,
+    pub circumferential_joint_builder: Box<dyn BlobJointBuilder>,
     /// Whether to include circumferential joints in the blob
     pub include_circumferential_joints: bool,
     /// The number of cross layer connections
@@ -185,14 +144,12 @@ impl Default for BlobBuilder {
             layer_size: NonZeroUsize::new(12).unwrap(),
             center_gap: 1.0,
             layer_gap: 0.1,
-            radial_joint_spec: BlobJointSpec::PrismaticSpringJoint {
-                stiffness: 10.0,
-                damping: 10.0,
-            },
-            circumferential_joint_spec: BlobJointSpec::SpringJoint {
-                stiffness: 10.0,
-                damping: 10.0,
-            },
+            radial_joint_builder: Box::new(PrismaticSpringJointBuilder::new(
+                Vector2::zeros(),
+                10.0,
+                10.0,
+            )),
+            circumferential_joint_builder: Box::new(SpringJointBuilder::new(1.0, 10.0, 10.0)),
             include_circumferential_joints: false,
             cross_layer_connections: 1,
             external_node_builder: BlobNodeBuilder::default(),
@@ -202,34 +159,6 @@ impl Default for BlobBuilder {
 }
 
 impl BlobBuilder {
-    fn connect_nodes<T: BlobPhysics>(
-        &self,
-        node1: BlobNode,
-        node2: BlobNode,
-        spec: &BlobJointSpec,
-        phys: &mut T,
-    ) {
-        let b1 = phys.get_body(&node1);
-        let b2 = phys.get_body(&node2);
-
-        let direction = Vector::from_homogeneous(
-            (b2.position().translation.vector - b1.position().translation.vector).to_homogeneous(),
-        )
-        .unwrap();
-        let joint: GenericJoint = match spec {
-            BlobJointSpec::SpringJoint { stiffness, damping } => {
-                SpringJointBuilder::new(direction.magnitude(), *stiffness, *damping)
-                    .build()
-                    .into()
-            }
-            BlobJointSpec::PrismaticSpringJoint { stiffness, damping } => {
-                PrismaticSpringJoint::new(direction, *stiffness, *damping).into()
-            }
-        };
-
-        phys.add_joint(&node1, &node2, joint);
-    }
-
     pub fn build<T: BlobPhysics>(&mut self, phys: &mut T) -> Blob {
         // build center
         let mut center = None;
@@ -267,7 +196,7 @@ impl BlobBuilder {
             if center.is_some() && layers.len() == 0 {
                 let c = center.unwrap();
                 for n in layer.iter() {
-                    self.connect_nodes(c, *n, &self.radial_joint_spec, phys);
+                    connect_nodes(c, *n, &mut self.radial_joint_builder, phys);
                     joints.push((c, *n));
                 }
             }
@@ -275,7 +204,7 @@ impl BlobBuilder {
             // connect adjacent nodes
             if self.include_circumferential_joints {
                 for (h1, h2) in layer.iter().circular_tuple_windows() {
-                    self.connect_nodes(*h1, *h2, &self.circumferential_joint_spec, phys);
+                    connect_nodes(*h1, *h2, &mut self.circumferential_joint_builder, phys);
                     joints.push((*h1, *h2));
                 }
             }
@@ -283,7 +212,7 @@ impl BlobBuilder {
             if let Some(prev_layer) = layers.last() {
                 for offset in 0..self.cross_layer_connections {
                     for (p, n) in layer.iter().zip(prev_layer.iter().cycle().skip(offset)) {
-                        self.connect_nodes(*p, *n, &self.circumferential_joint_spec, phys);
+                        connect_nodes(*p, *n, &mut self.circumferential_joint_builder, phys);
                         joints.push((*p, *n));
                     }
                 }
