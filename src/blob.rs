@@ -52,18 +52,6 @@ pub struct BlobBodyBuilder {
     pub collider_builder: ColliderBuilder,
 }
 
-// impl BlobBodyBuilder {
-//     /// Build a body and add to physics
-//     ///
-//     /// - `location`: the location of the body
-//     /// - `angle`: the orientation of the body, relative to the center
-//     pub fn build<T: BlobPhysics>(&mut self, location: Vector2<Real>, angle: f32) -> Body {
-//         self.body_builder = self.body_builder.clone().translation(location);
-//         self.collider_builder = self.collider_builder.clone().rotation(angle);
-//         phys.add_node(&self)
-//     }
-// }
-
 impl Default for BlobBodyBuilder {
     fn default() -> Self {
         Self {
