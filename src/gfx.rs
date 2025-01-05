@@ -1,9 +1,9 @@
-use crate::blob::{Blob, BlobNode, BlobPhysics};
+use crate::blob::{BlobPhysics, Body};
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 
 /// Draw a node based on its colliders
-fn draw_node_from_colliders<T: BlobPhysics>(node: &BlobNode, phys: &T, color: Color) {
+pub fn draw_node_from_colliders<T: BlobPhysics>(node: &Body, phys: &T, color: Color) {
     let body = phys.get_body(node);
     let position = body.position();
     for col in phys.get_colliders(node) {
@@ -40,29 +40,6 @@ fn draw_node_from_colliders<T: BlobPhysics>(node: &BlobNode, phys: &T, color: Co
     }
 }
 
-impl Blob {
-    pub fn draw<T: BlobPhysics>(&self, phys: &T) {
-        for (n1, n2) in self.joints.iter() {
-            let b1 = phys.get_body(&n1);
-            let b2 = phys.get_body(&n2);
-            draw_line(
-                b1.position().translation.vector.x,
-                b1.position().translation.vector.y,
-                b2.position().translation.vector.x,
-                b2.position().translation.vector.y,
-                5.0e-2,
-                LIGHTGRAY,
-            );
-        }
-
-        for layer in self.layers.iter() {
-            for node in layer.iter() {
-                draw_node_from_colliders(node, phys, SKYBLUE);
-            }
-        }
-
-        if let Some(c) = self.center {
-            draw_node_from_colliders(&c, phys, BLUE);
-        }
-    }
+pub trait Drawable {
+    fn draw<T: BlobPhysics>(&self, phys: &T);
 }

@@ -1,7 +1,7 @@
 use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
-use crate::blob::{BlobNode, BlobNodeBuilder, BlobPhysics};
+use crate::blob::{BlobBodyBuilder, BlobPhysics, Body, Joint};
 
 /// A generic physics simulation backed by rapier2d
 #[derive(Default)]
@@ -43,7 +43,7 @@ impl Physics {
 }
 
 impl BlobPhysics for Physics {
-    fn add_node(&mut self, builder: &BlobNodeBuilder) -> BlobNode {
+    fn add_node(&mut self, builder: &BlobBodyBuilder) -> Body {
         let body = builder.body_builder.build();
         let handle = self.bodies.insert(body);
         self.colliders.insert_with_parent(
@@ -53,10 +53,10 @@ impl BlobPhysics for Physics {
         );
         return handle;
     }
-    fn get_body(&self, node: &BlobNode) -> &RigidBody {
+    fn get_body(&self, node: &Body) -> &RigidBody {
         &self.bodies[*node]
     }
-    fn get_body_mut(&mut self, node: &BlobNode) -> &mut RigidBody {
+    fn get_body_mut(&mut self, node: &Body) -> &mut RigidBody {
         &mut self.bodies[*node]
     }
     fn get_collider(&self, node: &ColliderHandle) -> &Collider {
@@ -65,14 +65,17 @@ impl BlobPhysics for Physics {
     fn get_collider_mut(&mut self, node: &ColliderHandle) -> &mut Collider {
         &mut self.colliders[*node]
     }
-    fn get_colliders(&self, node: &BlobNode) -> Vec<&Collider> {
+    fn get_colliders(&self, node: &Body) -> Vec<&Collider> {
         let body = self.get_body(node);
         body.colliders()
             .into_iter()
             .map(|c| self.get_collider(c))
             .collect()
     }
-    fn add_joint(&mut self, node1: &BlobNode, node2: &BlobNode, joint: GenericJoint) {
-        self.impulse_joints.insert(*node1, *node2, joint, true);
+    fn add_joint(&mut self, node1: &Body, node2: &Body, joint: GenericJoint) -> Joint {
+        self.impulse_joints.insert(*node1, *node2, joint, true)
+    }
+    fn get_joint(&self, joint: &Joint) -> &ImpulseJoint {
+        self.impulse_joints.get(*joint).unwrap()
     }
 }

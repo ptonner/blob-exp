@@ -7,7 +7,9 @@ use macroquad::ui::{hash, root_ui};
 use nalgebra::Vector2;
 use rapier2d::prelude::*;
 
-use blobs::blob::{Blob, BlobBuilder, BlobNodeBuilder};
+use blobs::blob::*;
+use blobs::build::*;
+use blobs::gfx::Drawable;
 use blobs::phys::Physics;
 
 fn init(
@@ -19,7 +21,7 @@ fn init(
     layer_gap: f32,
     log_radius: f32,
     impulse: f32,
-) -> (Physics, Vec<Blob>) {
+) -> (Physics, Vec<LayeredBlob>) {
     let mut phys = Physics::default();
     // phys.integration_parameters.contact_damping_ratio = 1.0e2;
     // phys.integration_parameters.num_solver_iterations = NonZeroUsize::new(4).unwrap();
@@ -27,14 +29,14 @@ fn init(
         .num_internal_stabilization_iterations = 20;
     // phys.integration_parameters.max_ccd_substeps = 50;
 
-    let mut blobs = Vec::<Blob>::new();
+    let mut blobs = Vec::<LayeredBlob>::new();
     for i in 0..num_splits {
         for j in 0..num_splits {
             let center = vector![
                 size * (i as f32 / num_splits as f32) - size / 2.0 + size / 2.0 / num_splits as f32,
                 size * (j as f32 / num_splits as f32) - size / 2.0 + size / 2.0 / num_splits as f32
             ];
-            let mut builder = BlobBuilder {
+            let mut builder = LayeredBlobBuilder {
                 center,
                 center_gap,
                 radius: (10.0_f32).powf(log_radius),
@@ -42,7 +44,7 @@ fn init(
                 layer_gap,
                 layer_size: NonZeroUsize::new(shell_size as usize)
                     .unwrap_or(NonZeroUsize::new(12).unwrap()),
-                external_node_builder: BlobNodeBuilder {
+                external_node_builder: BlobBodyBuilder {
                     body_builder: RigidBodyBuilder::dynamic(),
                     collider_builder: ColliderBuilder::cuboid(1.0, 1.0e-1),
                 },
@@ -51,8 +53,7 @@ fn init(
             let blob = builder.build(&mut phys);
 
             let ang = rand::gen_range(-PI, PI);
-            let imp =
-                Vector2::new(ang.cos(), ang.sin()).normalize() * blob.total_mass(&phys) * impulse;
+            let imp = Vector2::new(ang.cos(), ang.sin()).normalize() * blob.mass(&phys) * impulse;
             blob.apply_impulse(imp, &mut phys);
             blobs.push(blob);
         }

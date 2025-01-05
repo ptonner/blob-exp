@@ -1,6 +1,6 @@
 use rapier2d::prelude::*;
 
-use crate::blob::{BlobNode, BlobPhysics};
+use crate::blob::{BlobPhysics, Body, Joint};
 
 /// A prismatic spring joint for building blob joints with valid motion along a
 /// single axis.
@@ -363,13 +363,13 @@ impl BlobJointBuilder for SpringJointBuilder {
 
 /// Connect to blob nodes based on the joint builder
 pub fn connect_nodes<T: BlobPhysics>(
-    node1: BlobNode,
-    node2: BlobNode,
+    node1: Body,
+    node2: Body,
     spec: &mut Box<dyn BlobJointBuilder>,
     phys: &mut T,
-) {
+) -> Joint {
     let b1 = phys.get_body(&node1);
     let b2 = phys.get_body(&node2);
     let joint = spec.build_blob_joint(b1, b2);
-    phys.add_joint(&node1, &node2, joint);
+    phys.add_joint(&node1, &node2, joint)
 }
