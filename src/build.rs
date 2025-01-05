@@ -76,8 +76,7 @@ impl BlobBuilder for LayeredBlobBuilder {
         // build center
         let mut center = None;
         if self.include_center {
-            // center = Some(self.build_node(self.center, phys));
-            center = Some(self.internal_node_builder.build(self.center, 0.0, phys));
+            center = Some(phys.add_body(&self.internal_node_builder, self.center, 0.0));
         }
 
         // build layers
@@ -98,9 +97,9 @@ impl BlobBuilder for LayeredBlobBuilder {
                 // this angle is oriented towards the center
                 let local_angle = angle + FRAC_PI_2;
                 let node = if l == self.num_layers {
-                    self.external_node_builder.build(offset, local_angle, phys)
+                    phys.add_body(&self.external_node_builder, offset, local_angle)
                 } else {
-                    self.internal_node_builder.build(offset, local_angle, phys)
+                    phys.add_body(&self.internal_node_builder, offset, local_angle)
                 };
                 layer.push(node);
             }

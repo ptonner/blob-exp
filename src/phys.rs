@@ -43,14 +43,13 @@ impl Physics {
 }
 
 impl BlobPhysics for Physics {
-    fn add_node(&mut self, builder: &BlobBodyBuilder) -> Body {
-        let body = builder.body_builder.build();
+    fn add_body(&mut self, builder: &BlobBodyBuilder, location: Vector2<Real>, angle: f32) -> Body {
+        let body_builder = builder.body_builder.clone().translation(location);
+        let collider_builder = builder.collider_builder.clone().rotation(angle);
+        let body = body_builder.build();
         let handle = self.bodies.insert(body);
-        self.colliders.insert_with_parent(
-            builder.collider_builder.build(),
-            handle,
-            &mut self.bodies,
-        );
+        self.colliders
+            .insert_with_parent(collider_builder.build(), handle, &mut self.bodies);
         return handle;
     }
     fn get_body(&self, node: &Body) -> &RigidBody {

@@ -30,7 +30,12 @@ pub trait BlobLike {
 
 /// Trait for physics object compatible with blob simulations
 pub trait BlobPhysics {
-    fn add_node(&mut self, builder: &BlobBodyBuilder) -> Body;
+    /// Build a body and add to physics
+    ///
+    /// - `location`: the location of the body
+    /// - `angle`: the orientation of the body, relative to the center
+    fn add_body(&mut self, builder: &BlobBodyBuilder, location: Vector2<Real>, angle: f32) -> Body;
+
     fn add_joint(&mut self, node1: &Body, node2: &Body, joint: GenericJoint) -> Joint;
     fn get_body(&self, node: &Body) -> &RigidBody;
     fn get_body_mut(&mut self, node: &Body) -> &mut RigidBody;
@@ -47,22 +52,17 @@ pub struct BlobBodyBuilder {
     pub collider_builder: ColliderBuilder,
 }
 
-impl BlobBodyBuilder {
-    /// Build a body and add to physics
-    ///
-    /// - `location`: the location of the body
-    /// - `angle`: the orientation of the body, relative to the center
-    pub fn build<T: BlobPhysics>(
-        &mut self,
-        location: Vector2<Real>,
-        angle: f32,
-        phys: &mut T,
-    ) -> Body {
-        self.body_builder = self.body_builder.clone().translation(location);
-        self.collider_builder = self.collider_builder.clone().rotation(angle);
-        phys.add_node(&self)
-    }
-}
+// impl BlobBodyBuilder {
+//     /// Build a body and add to physics
+//     ///
+//     /// - `location`: the location of the body
+//     /// - `angle`: the orientation of the body, relative to the center
+//     pub fn build<T: BlobPhysics>(&mut self, location: Vector2<Real>, angle: f32) -> Body {
+//         self.body_builder = self.body_builder.clone().translation(location);
+//         self.collider_builder = self.collider_builder.clone().rotation(angle);
+//         phys.add_node(&self)
+//     }
+// }
 
 impl Default for BlobBodyBuilder {
     fn default() -> Self {
